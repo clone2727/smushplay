@@ -1,0 +1,39 @@
+smushplay 0.0.1
+===============
+
+What is it?
+***********
+	A standalone LucasArts SMUSH movie player.
+
+How do I build it?
+******************
+	1) Have SDL installed on your system
+	2) Type 'make'
+	3) If that doesn't work, submit a pull request that fixes it
+
+How do I use it?
+****************
+	From the command line! Just run "./smushplay <video name>" and a window should appear with the video.
+
+What videos are supported?
+**************************
+	Since there are many games out there using SMUSH, not all variants are supported right now. Here are games and their statuses:
+
+	* Rebel Assault
+		Rebel Assault videos use the oldest version of SMUSH. Only a few of these videos play. No sound.
+	* Rebel Assault II
+		Most Rebel Assault II videos play properly, but there are some glitches. No sound.
+	* Mortimer
+		Some Mortimer videos work, but they are using a scaling feature that is not supported yet. No sound.
+	* Full Throttle/The Dig
+		The videos should play properly. No sound.
+	* The Curse of Monkey Island/Shadows of the Empire/Grim Fandango *demo*/Outlaws
+		The videos should play properly. Sound works.
+	* Mysteries of the Sith
+		The videos do not show anything. Sound works.
+	* X-Wing Alliance/Episode I Racer/Grim Fandango *full*
+		The videos should play properly. Sound works.
+	* Other games
+		Untested! Please test and report!
+
+	Also note that playing "NUT" files may or may not work. They weren't meant to be played as videos. Also note that text is not displayed in videos at this time, but hopefully will in the future.
