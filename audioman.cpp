@@ -26,6 +26,7 @@
 #include "audioman.h"
 #include "audiostream.h"
 #include "rate.h"
+#include "util.h"
 
 AudioManager::AudioManager() {
 	_mutex = SDL_CreateMutex();
@@ -199,7 +200,7 @@ int8 AudioManager::getBalance(const AudioHandle &handle) {
 AudioManager::Channel::Channel(AudioStream *stream, uint destFreq, byte volume, int8 balance) {
 	_stream = stream;
 	_converter = makeRateConverter(stream->getRate(), destFreq, stream->getChannels() == 2);
-	_balance = balance;
+	_balance = CLIP<int8>(balance, -127, 127);
 	_volume = volume;
 	updateChannelVolumes();
 }
@@ -242,6 +243,6 @@ void AudioManager::Channel::setVolume(byte volume) {
 }
 
 void AudioManager::Channel::setBalance(int8 balance) {
-	_balance = balance;
+	_balance = CLIP<int8>(balance, -127, 127);
 	updateChannelVolumes();
 }
