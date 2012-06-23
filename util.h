@@ -39,5 +39,13 @@ uint32 READ_BE_UINT32(const void *ptr);
 
 template<typename T> inline T ABS(T x) { return (x >= 0) ? x : -x; }
 template<typename T> inline void SWAP(T &a, T &b) { T tmp = a; a = b; b = tmp; }
+template<typename T> inline T CLIP(T v, T amin, T amax) {
+	if (v < amin)
+		return amin;
+	else if (v > amax)
+		return amax;
+
+	return v;
+}
 
 #endif
