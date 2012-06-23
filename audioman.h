@@ -55,6 +55,11 @@ public:
 	AudioManager();
 	~AudioManager();
 
+	enum {
+		kMaxChannelVolume = 0xFF,
+		kMaxAudioManVolume = 0x100
+	};
+
 	bool init();
 	void play(AudioStream *stream);
 	void play(AudioStream *stream, AudioHandle &handle);
@@ -69,8 +74,23 @@ private:
 	SDL_mutex *_mutex;
 
 	struct Channel {
-		AudioStream *stream;
-		RateConverter *converter;
+	public:
+		Channel(AudioStream *stream, uint destFreq, byte volume, int8 balance);
+		~Channel();
+
+		bool endOfStream() const;
+		bool endOfData() const;
+		void mix(int16 *samples, uint length);
+
+	protected:
+		AudioStream *_stream;
+		RateConverter *_converter;
+		int8 _balance;
+		byte _volume;
+		uint16 _leftVolume, _rightVolume;
+
+	private:
+		void updateChannelVolumes();
 	};
 
 	typedef std::map<uint, Channel *> ChannelMap;

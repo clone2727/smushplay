@@ -66,9 +66,7 @@ void AudioManager::play(AudioStream *stream, AudioHandle &handle) {
 	if (!stream)
 		return;
 
-	Channel *chan = new Channel();
-	chan->stream = stream;
-	chan->converter = makeRateConverter(stream->getRate(), _spec.freq, stream->getChannels() == 2);
+	Channel *chan = new Channel(stream, _spec.freq, kMaxChannelVolume, 0);
 
 	SDL_mutexP(_mutex);
 	handle._id = _channelSeed++;
@@ -93,10 +91,7 @@ void AudioManager::stop(const AudioHandle &handle) {
 	ChannelMap::iterator it = _channels.find(handle._id);
 
 	if (it != _channels.end()) {
-		Channel *chan = it->second;
-		delete chan->stream;
-		delete chan->converter;
-		delete chan;
+		delete it->second;
 		_channels.erase(it);
 	}
 
@@ -106,12 +101,8 @@ void AudioManager::stop(const AudioHandle &handle) {
 void AudioManager::stopAll() {
 	SDL_mutexP(_mutex);
 
-	for (ChannelMap::iterator it = _channels.begin(); it != _channels.end(); it++) {
-		Channel *channel = it->second;
-		delete channel->stream;
-		delete channel->converter;
-		delete channel;
-	}
+	for (ChannelMap::iterator it = _channels.begin(); it != _channels.end(); it++)
+		delete it->second;
 
 	_channels.clear();
 
@@ -131,12 +122,52 @@ void AudioManager::callbackHandler(byte *samples, int len) {
 	for (ChannelMap::iterator it = _channels.begin(); it != _channels.end(); it++) {
 		Channel *channel = it->second;
 
-		if (channel->stream->endOfData()) {
-			// TODO: Remove the channel?
-		} else {
-			channel->converter->flow(*channel->stream, (int16 *)samples, len >> 2, 255, 255);
+		if (channel->endOfStream()) {
+			// TODO: Remove the channel
+		} else if (!channel->endOfData()) {
+			channel->mix((int16 *)samples, len >> 2);
 		}
 	}
 
 	SDL_mutexV(_mutex);
+}
+
+AudioManager::Channel::Channel(AudioStream *stream, uint destFreq, byte volume, int8 balance) {
+	_stream = stream;
+	_converter = makeRateConverter(stream->getRate(), destFreq, stream->getChannels() == 2);
+	_balance = balance;
+	_volume = volume;
+	updateChannelVolumes();
+}
+
+AudioManager::Channel::~Channel() {
+	delete _stream;
+	delete _converter;
+}
+
+void AudioManager::Channel::updateChannelVolumes() {
+	// TODO: Global volume setting instead of kMaxAudioManVolume
+	int vol = kMaxAudioManVolume * _volume;
+
+	if (_balance == 0) {
+		_leftVolume = _rightVolume = vol / kMaxChannelVolume;
+	} else if (_balance < 0) {
+		_leftVolume = vol / kMaxChannelVolume;
+		_rightVolume = ((127 + _balance) * vol) / kMaxChannelVolume;
+	} else {
+		_leftVolume = ((127 - _balance) * vol) / kMaxChannelVolume;
+		_rightVolume = vol / kMaxChannelVolume;
+	}
+}
+
+void AudioManager::Channel::mix(int16 *samples, uint length) {
+	_converter->flow(*_stream, samples, length, _leftVolume, _rightVolume);
+}
+
+bool AudioManager::Channel::endOfStream() const {
+	return _stream->endOfStream();
+}
+
+bool AudioManager::Channel::endOfData() const {
+	return _stream->endOfData();
 }
