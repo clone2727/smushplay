@@ -20,6 +20,8 @@
  *
  */
 
+// Inspired by the ScummVM code of the same name (GPLv2+)
+
 #ifndef AUDIOMAN_H
 #define AUDIOMAN_H
 
@@ -28,11 +30,25 @@
 #include <map>
 #include "types.h"
 
+class AudioManager;
 class AudioStream;
 class RateConverter;
 
-// TODO: Expand with a handle system similar to ScummVM's
-// Maybe eventually just replace with ScummVM's
+/**
+ * An AudioHandle instances corresponds to a specific sound
+ * being played via the AudioManager. It can be used to control that
+ * sound (pause it, stop it, etc.).
+ * @see The AudioManager class
+ */
+class AudioHandle {
+	friend class AudioManager;
+
+public:
+	inline AudioHandle() : _id(0xFFFFFFFF) {}
+
+protected:
+	uint32 _id;
+};
 
 class AudioManager {
 public:
@@ -40,8 +56,9 @@ public:
 	~AudioManager();
 
 	bool init();
-	void play(uint channel, AudioStream *stream);
-	void stop(uint channel);
+	void play(AudioStream *stream);
+	void play(AudioStream *stream, AudioHandle &handle);
+	void stop(const AudioHandle &handle);
 	void stopAll();
 
 private:
@@ -56,8 +73,9 @@ private:
 		RateConverter *converter;
 	};
 
-	typedef std::map<uint, Channel*> ChannelMap;
+	typedef std::map<uint, Channel *> ChannelMap;
 	ChannelMap _channels;
+	uint _channelSeed;
 };
 
 #endif

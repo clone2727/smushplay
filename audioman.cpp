@@ -20,6 +20,8 @@
  *
  */
 
+// Inspired by the ScummVM code of the same name (GPLv2+)
+
 #include <assert.h>
 #include "audioman.h"
 #include "audiostream.h"
@@ -27,6 +29,7 @@
 
 AudioManager::AudioManager() {
 	_mutex = SDL_CreateMutex();
+	_channelSeed = 0;
 }
 
 AudioManager::~AudioManager() {
@@ -54,22 +57,40 @@ bool AudioManager::init() {
 	return true;
 }
 
-void AudioManager::play(uint channel, AudioStream *stream) {
-	stop(channel);
+void AudioManager::play(AudioStream *stream) {
+	AudioHandle handle;
+	play(stream, handle);
+}
+
+void AudioManager::play(AudioStream *stream, AudioHandle &handle) {
+	if (!stream)
+		return;
 
 	Channel *chan = new Channel();
 	chan->stream = stream;
 	chan->converter = makeRateConverter(stream->getRate(), _spec.freq, stream->getChannels() == 2);
 
 	SDL_mutexP(_mutex);
-	_channels[channel] = chan;
+	handle._id = _channelSeed++;
+
+	if (handle._id == 0xFFFFFFFF) {
+		// Probably could have better error handling, but I really hope
+		// this never happens :P
+		fprintf(stderr, "Rolling over AudioManager id's\n");
+		handle._id = 0;
+	}
+
+	_channels[handle._id] = chan;
 	SDL_mutexV(_mutex);
 }
 
-void AudioManager::stop(uint channel) {
+void AudioManager::stop(const AudioHandle &handle) {
+	if (handle._id == 0xFFFFFFFF)
+		return;
+
 	SDL_mutexP(_mutex);
 
-	ChannelMap::iterator it = _channels.find(channel);
+	ChannelMap::iterator it = _channels.find(handle._id);
 
 	if (it != _channels.end()) {
 		Channel *chan = it->second;

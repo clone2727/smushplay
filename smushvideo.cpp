@@ -713,7 +713,7 @@ bool SMUSHVideo::bufferIACTAudio(uint32 size) {
 		// Ignore _audioRate since it's always 22050Hz
 		// and CMI often lies and says 11025Hz
 		_iactStream = makeQueuingAudioStream(22050, 2);
-		_audio->play(0, _iactStream);
+		_audio->play(_iactStream);
 		_iactPos = 0;
 		_iactBuffer = new byte[4096];
 	}
@@ -990,7 +990,7 @@ bool SMUSHVideo::handleVIMA(uint32 size) {
 
 	if (!_iactStream) {
 		_iactStream = makeQueuingAudioStream(_audioRate, _audioChannels);
-		_audio->play(0, _iactStream);
+		_audio->play(_iactStream);
 	}
 
 	uint32 decompressedSize = readUint32BE(_file);
