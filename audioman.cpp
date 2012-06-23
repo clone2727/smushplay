@@ -62,11 +62,11 @@ void AudioManager::play(AudioStream *stream) {
 	play(stream, handle);
 }
 
-void AudioManager::play(AudioStream *stream, AudioHandle &handle) {
+void AudioManager::play(AudioStream *stream, AudioHandle &handle, byte volume, int8 balance) {
 	if (!stream)
 		return;
 
-	Channel *chan = new Channel(stream, _spec.freq, kMaxChannelVolume, 0);
+	Channel *chan = new Channel(stream, _spec.freq, volume, balance);
 
 	SDL_mutexP(_mutex);
 	handle._id = _channelSeed++;
@@ -132,6 +132,70 @@ void AudioManager::callbackHandler(byte *samples, int len) {
 	SDL_mutexV(_mutex);
 }
 
+void AudioManager::setVolume(const AudioHandle &handle, byte volume) {
+	if (handle._id == 0xFFFFFFFF)
+		return;
+
+	SDL_mutexP(_mutex);
+
+	ChannelMap::iterator it = _channels.find(handle._id);
+
+	if (it != _channels.end())
+		it->second->setVolume(volume);
+
+	SDL_mutexV(_mutex);
+}
+
+byte AudioManager::getVolume(const AudioHandle &handle) {
+	if (handle._id == 0xFFFFFFFF)
+		return 0;
+
+	byte volume = 0;
+
+	SDL_mutexP(_mutex);
+
+	ChannelMap::iterator it = _channels.find(handle._id);
+
+	if (it != _channels.end())
+		volume = it->second->getVolume();
+
+	SDL_mutexV(_mutex);
+
+	return volume;
+}
+
+void AudioManager::setBalance(const AudioHandle &handle, int8 balance) {
+	if (handle._id == 0xFFFFFFFF)
+		return;
+
+	SDL_mutexP(_mutex);
+
+	ChannelMap::iterator it = _channels.find(handle._id);
+
+	if (it != _channels.end())
+		it->second->setBalance(balance);
+
+	SDL_mutexV(_mutex);
+}
+
+int8 AudioManager::getBalance(const AudioHandle &handle) {
+	if (handle._id == 0xFFFFFFFF)
+		return 0;
+
+	int8 balance = 0;
+
+	SDL_mutexP(_mutex);
+
+	ChannelMap::iterator it = _channels.find(handle._id);
+
+	if (it != _channels.end())
+		balance = it->second->getVolume();
+
+	SDL_mutexV(_mutex);
+
+	return balance;
+}
+
 AudioManager::Channel::Channel(AudioStream *stream, uint destFreq, byte volume, int8 balance) {
 	_stream = stream;
 	_converter = makeRateConverter(stream->getRate(), destFreq, stream->getChannels() == 2);
@@ -153,9 +217,9 @@ void AudioManager::Channel::updateChannelVolumes() {
 		_leftVolume = _rightVolume = vol / kMaxChannelVolume;
 	} else if (_balance < 0) {
 		_leftVolume = vol / kMaxChannelVolume;
-		_rightVolume = ((127 + _balance) * vol) / kMaxChannelVolume;
+		_rightVolume = ((127 + _balance) * vol) / (kMaxChannelVolume * 127);
 	} else {
-		_leftVolume = ((127 - _balance) * vol) / kMaxChannelVolume;
+		_leftVolume = ((127 - _balance) * vol) / (kMaxChannelVolume * 127);
 		_rightVolume = vol / kMaxChannelVolume;
 	}
 }
@@ -170,4 +234,14 @@ bool AudioManager::Channel::endOfStream() const {
 
 bool AudioManager::Channel::endOfData() const {
 	return _stream->endOfData();
+}
+
+void AudioManager::Channel::setVolume(byte volume) {
+	_volume = volume;
+	updateChannelVolumes();
+}
+
+void AudioManager::Channel::setBalance(int8 balance) {
+	_balance = balance;
+	updateChannelVolumes();
 }

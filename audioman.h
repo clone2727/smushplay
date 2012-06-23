@@ -62,9 +62,14 @@ public:
 
 	bool init();
 	void play(AudioStream *stream);
-	void play(AudioStream *stream, AudioHandle &handle);
+	void play(AudioStream *stream, AudioHandle &handle, byte volume = kMaxChannelVolume, int8 balance = 0);
 	void stop(const AudioHandle &handle);
 	void stopAll();
+
+	void setVolume(const AudioHandle &handle, byte volume);
+	byte getVolume(const AudioHandle &handle);
+	void setBalance(const AudioHandle &handle, int8 balance);
+	int8 getBalance(const AudioHandle &handle);
 
 private:
 	void callbackHandler(byte *samples, int len);
@@ -81,6 +86,11 @@ private:
 		bool endOfStream() const;
 		bool endOfData() const;
 		void mix(int16 *samples, uint length);
+
+		void setVolume(byte volume);
+		byte getVolume() const { return _volume; }
+		void setBalance(int8 balance);
+		int8 getBalance() const { return _balance; }
 
 	protected:
 		AudioStream *_stream;
