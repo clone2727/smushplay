@@ -26,6 +26,7 @@
 #ifndef SMUSHVIDEO_H
 #define SMUSHVIDEO_H
 
+#include <map>
 #include <stdio.h>
 #include "graphicsman.h"
 #include "types.h"
@@ -34,7 +35,16 @@ class AudioManager;
 class Blocky16;
 class Codec37Decoder;
 class Codec47Decoder;
+class SMUSHChannel;
 class QueuingAudioStream;
+
+struct SMUSHTrackHandle {
+	uint32 type;
+	uint32 id;
+	uint32 maxFrames;
+};
+
+bool operator<(const SMUSHTrackHandle &handle1, const SMUSHTrackHandle &handle2);
 
 class SMUSHVideo {
 public:
@@ -86,7 +96,7 @@ private:
 	bool handleNewPalette(GraphicsManager &gfx, uint32 size);
 	bool handleStore(uint32 size);
 	bool handleDeltaPalette(GraphicsManager &gfx, uint32 size);
-	bool handleSoundFrame(uint32 size);
+	bool handleSoundFrame(uint32 type, uint32 size);
 	bool handleVIMA(uint32 size);
 
 	// Codecs
@@ -98,15 +108,20 @@ private:
 
 	// Sound
 	bool _oldSoundHeader, _runSoundHeaderCheck;
+	bool _hasIACTSound, _ranIACTSoundCheck;
 	uint _audioRate, _audioChannels;
 	void detectSoundHeaderType();
-	bool bufferIMuseAudio(uint16 trackFlags);
+	void detectIACTType(uint32 flags);
+	bool bufferIMuseAudio(uint32 size, uint16 trackFlags);
 	bool bufferIACTAudio(uint32 size);
 	AudioManager *_audio;
 	QueuingAudioStream *_iactStream;
 	byte *_iactBuffer;
 	uint32 _iactPos;
 	uint16 *_vimaDestTable;
+	SMUSHChannel *findAudioTrack(const SMUSHTrackHandle &track);
+	typedef std::map<SMUSHTrackHandle, SMUSHChannel *> ChannelMap;
+	ChannelMap _audioTracks;
 };
 
 #endif

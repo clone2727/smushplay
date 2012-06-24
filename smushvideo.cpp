@@ -32,6 +32,7 @@
 #include "codec47.h"
 #include "fileutil.h"
 #include "pcm.h"
+#include "smushchannel.h"
 #include "smushvideo.h"
 #include "util.h"
 #include "vima.h"
@@ -50,6 +51,8 @@
 // Mysteries of the Sith: Missing codec 48
 // Mortimer: Some videos work, but looks like it scales up low-res frames; missing codec 23
 // IACT audio (CMI/SotE/Grim Demo/Outlaws/MotS) works
+// iMuse audio (The Dig) works
+// PSAD audio (Rebel Assault/Rebel Assault II/Full Throttle/Mortimer) mostly works
 
 // SANM:
 // X-Wing Alliance/Grim Fandango/Racer: Should playback video fine
@@ -66,6 +69,7 @@ SMUSHVideo::SMUSHVideo(AudioManager &audio) : _audio(&audio) {
 	_codec47 = 0;
 	_blocky16 = 0;
 	_runSoundHeaderCheck = false;
+	_ranIACTSoundCheck = false;
 	_audioChannels = 0;
 	_width = _height = 0;
 	_iactStream = 0;
@@ -153,11 +157,17 @@ void SMUSHVideo::close() {
 		_vimaDestTable = 0;
 
 		_runSoundHeaderCheck = false;
+		_ranIACTSoundCheck = false;
 		_storeFrame = false;
 		_audioChannels = 0;
 		_width = _height = 0;
 		_frameRate = 0;
 		_audioRate = 0;
+
+		for (ChannelMap::iterator it = _audioTracks.begin(); it != _audioTracks.end(); it++)
+			delete it->second;
+
+		_audioTracks.clear();
 	}
 }
 
@@ -334,7 +344,7 @@ bool SMUSHVideo::handleFrame(GraphicsManager &gfx) {
 		case MKTAG('P', 'S', 'A', 'D'):
 		case MKTAG('P', 'S', 'D', '2'):
 		case MKTAG('P', 'V', 'O', 'C'):
-			result = handleSoundFrame(subSize);
+			result = handleSoundFrame(subType, subSize);
 			break;
 		case MKTAG('S', 'K', 'I', 'P'):
 			// INSANE related
@@ -577,13 +587,13 @@ void SMUSHVideo::decodeCodec1(int left, int top, uint width, uint height) {
 	}
 }
 
-bool SMUSHVideo::handleSoundFrame(uint32 size) {
+bool SMUSHVideo::handleSoundFrame(uint32 type, uint32 size) {
 	// Old PSAD-based sound
 	// As used by Rebel Assault, Rebel Assault II, and Full Throttle
 	// Rebel Assault I/II are 11025Hz
 	// ScummVM uses 22050Hz for Full Throttle
 
-	uint32 track, index, maxFrames;
+	uint32 trackID, index, maxFrames;
 	uint16 flags = 0;
 	byte vol = 127;
 	int8 pan = 0;
@@ -596,12 +606,12 @@ bool SMUSHVideo::handleSoundFrame(uint32 size) {
 		detectSoundHeaderType();
 
 	if (_oldSoundHeader) {
-		track = readUint32BE(_file);
+		trackID = readUint32BE(_file);
 		index = readUint32BE(_file);
 		maxFrames = readUint32BE(_file);
 		size -= 12;
 	} else {
-		track = readUint16LE(_file);
+		trackID = readUint16LE(_file);
 		index = readUint16LE(_file);
 		maxFrames = readUint16LE(_file);
 		flags = readUint16LE(_file);
@@ -610,7 +620,35 @@ bool SMUSHVideo::handleSoundFrame(uint32 size) {
 		size -= 10;
 	}
 
-	// TODO: Handle audio
+	SMUSHTrackHandle handle;
+	handle.type = type;
+	handle.id = trackID;
+	handle.maxFrames = maxFrames;
+
+	SMUSHChannel *track = findAudioTrack(handle);
+
+	if (index == 0) {
+		// TODO: Loop tracks (RA2 uses this)
+		if (flags & 0x40)
+			printf("STUB: Loop track?\n");
+
+		delete track;
+		track = new SAUDChannel(_audio, trackID, maxFrames, _audioRate);
+		_audioTracks[handle] = track;
+	} else if (!track) {
+		fprintf(stderr, "Failed to find audio track\n");
+		return false;
+	}
+
+	// TODO: This isn't time-accurate enough
+	// It causes some noticeable glitches in RA2
+	track->setVolume(vol);
+	track->setBalance(pan);
+
+	byte *data = new byte[size];
+	fread(data, 1, size, _file);
+
+	track->appendData(index, data, size); 
 
 	return true;
 }
@@ -683,12 +721,17 @@ bool SMUSHVideo::handleIACT(uint32 size) {
 	/* int16 unknown = */ readSint16LE(_file);
 	uint16 trackFlags = readUint16LE(_file);
 
-	if (code == 8 && flags == 46 && trackFlags != 1000) {
-		// Audio track
-		if (trackFlags == 0)
-			return bufferIACTAudio(size);
+	if (code == 8 && flags == 46) {
+		if (!_ranIACTSoundCheck)
+			detectIACTType(trackFlags);
 
-		return bufferIMuseAudio(trackFlags);
+		if (_hasIACTSound) {
+			// Audio track
+			if (trackFlags == 0)
+				return bufferIACTAudio(size);
+
+			return bufferIMuseAudio(size, trackFlags);
+		}
 	} if (code == 6 && flags == 38) {
 		// Clear frame? Seems to fix some RA2 videos
 		//if (_buffer)
@@ -700,9 +743,52 @@ bool SMUSHVideo::handleIACT(uint32 size) {
 	return true;
 }
 
-bool SMUSHVideo::bufferIMuseAudio(uint16 trackFlags) {
-	// TODO: Queue iMuse audio (22050Hz)
+bool SMUSHVideo::bufferIMuseAudio(uint32 size, uint16 trackFlags) {
+	// Queue iMuse audio (22050Hz)
 	// (As used by The Dig (only?))
+
+	uint16 trackID = readUint16LE(_file);
+	uint16 index = readUint16LE(_file);
+	uint16 frameCount = readUint16LE(_file);
+	/* uint32 bytesLeft = */ readUint32LE(_file);
+	size -= 18;
+
+	if (trackFlags == 1) {
+		trackID += 100;
+	} else if (trackFlags == 2) {
+		trackID += 200;
+	} else if (trackFlags == 3) {
+		trackID += 300;
+	} else if ((trackFlags >= 100) && (trackFlags <= 163)) {
+		trackID += 400;
+	} else if ((trackFlags >= 200) && (trackFlags <= 263)) {
+		trackID += 500;
+	} else if ((trackFlags >= 300) && (trackFlags <= 363)) {
+		trackID += 600;
+	} else {
+		fprintf(stderr, "SMUSHVideo::bufferIMuseAudio(): bad track flags: %d\n", trackFlags);
+		return false;
+	}
+
+	SMUSHTrackHandle handle;
+	handle.type = MKTAG('i', 'M', 'U', 'S');
+	handle.id = trackID;
+	handle.maxFrames = frameCount;
+
+	SMUSHChannel *track = findAudioTrack(handle);
+
+	if (!track || index == 0) {
+		delete track;
+		track = new IMuseChannel(_audio, trackID, frameCount);
+		track->setVolume(trackFlags);
+		_audioTracks[handle] = track;
+	}
+
+	byte *data = new byte[size];
+	fread(data, 1, size, _file);
+
+	track->appendData(index, data, size); 
+
 	return true;
 }
 
@@ -1011,4 +1097,50 @@ bool SMUSHVideo::handleVIMA(uint32 size) {
 
 	_iactStream->queueAudioStream(makePCMStream((byte *)dst, decompressedSize * _audioChannels * 2, _audioRate, _iactStream->getChannels(), flags));
 	return true;
+}
+
+SMUSHChannel *SMUSHVideo::findAudioTrack(const SMUSHTrackHandle &track) {
+	ChannelMap::iterator it = _audioTracks.find(track);
+
+	if (it != _audioTracks.end())
+		return it->second;
+
+	return 0;
+}
+
+void SMUSHVideo::detectIACTType(uint flags) {
+	// Detect the IACT sound type
+
+	if (flags == 0) {
+		// CMI-era sound, OK
+		_hasIACTSound = true;
+	} else {
+		// Might be The Dig sound
+		// (Or just a regular IACT)
+		fseek(_file, 10, SEEK_CUR);
+		_hasIACTSound = readUint32BE(_file) == MKTAG('i', 'M', 'U', 'S');
+		fseek(_file, -14, SEEK_CUR);
+	}
+
+	_ranIACTSoundCheck = true;
+}
+
+// Just a simple < operator for our three values
+bool operator<(const SMUSHTrackHandle &handle1, const SMUSHTrackHandle &handle2) {
+	if (handle1.type < handle2.type)
+		return true;
+
+	if (handle1.type > handle2.type)
+		return false;
+
+	if (handle1.id < handle2.id)
+		return true;
+
+	if (handle1.id > handle2.id)
+		return false;
+
+	if (handle1.maxFrames < handle2.maxFrames)
+		return true;
+
+	return false;
 }
