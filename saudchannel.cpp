@@ -64,13 +64,16 @@ void SAUDChannel::readHeader() {
 			_dataConsumed = dataConsumed;
 			_totalDataSize = size;
 			break;
-		} else {
-			// TODO: Find other sound rates in other tags
-			// Used by Mortimer, and others
 		}
 
 		if (size + 8 > _dataSize - dataConsumed)
 			return;
+
+		// The movie can override the rate
+		// However, it only seems certain sizes of the chunk have the info
+		// Mortimer makes heavy use of this, RA2 sporadic, and FT minor
+		if (tag == MKTAG('S', 'T', 'R', 'K') && size == 14)
+			_rate = READ_BE_UINT16(ptr + 12);
 
 		ptr += size;
 		dataConsumed += size;
