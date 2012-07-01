@@ -636,8 +636,9 @@ bool SMUSHVideo::handleSoundFrame(uint32 type, uint32 size) {
 		track = new SAUDChannel(_audio, trackID, maxFrames, _audioRate);
 		_audioTracks[handle] = track;
 	} else if (!track) {
-		fprintf(stderr, "Failed to find audio track\n");
-		return false;
+		// Some Rebel Assault videos are doing this. Seems to be harmless, though.
+		fprintf(stderr, "WARNING: Failed to find audio track (%d, %d, %d)\n", trackID, index, maxFrames);
+		return true;
 	}
 
 	// TODO: This isn't time-accurate enough
