@@ -37,5 +37,5 @@ What videos are supported?
 		Untested! Please test and report!
 
 	Also note that playing "NUT" files may or may not work. They weren't meant to be played as videos. Also note that text is not displayed in videos at this time, but hopefully will in the future.
-	ScummVM-compressed videos are not supported at this time.
+	ScummVM-compressed videos are not supported at this time. Standalone SMUSH audio files are not supported at this time.
 	You may have to gunzip files from Episode I Racer or Grim Fandango for them to work at this time.
