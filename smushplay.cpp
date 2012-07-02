@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
 
 	SMUSHVideo video(audio);
 	if (!video.load(argv[1])) {
-		fprintf(stderr, "Failed to open SMUSH video '%s'\n", argv[1]);
+		fprintf(stderr, "Failed to play file '%s'\n", argv[1]);
 		return 1;
 	}
 
