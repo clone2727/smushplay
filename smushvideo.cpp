@@ -90,7 +90,11 @@ bool SMUSHVideo::load(const char *fileName) {
 		return false;
 
 	_mainTag = readUint32BE(_file);
-	if (_mainTag != MKTAG('A', 'N', 'I', 'M') && _mainTag != MKTAG('S', 'A', 'N', 'M')) {
+	if (_mainTag == MKTAG('S', 'A', 'U', 'D')) {
+		fprintf(stderr, "Standalone SMUSH audio files not supported atm\n");
+		close();
+		return false;
+	} else if (_mainTag != MKTAG('A', 'N', 'I', 'M') && _mainTag != MKTAG('S', 'A', 'N', 'M')) {
 		fprintf(stderr, "Not a valid SMUSH FourCC\n");
 		close();
 		return false;
