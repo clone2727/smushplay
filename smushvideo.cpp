@@ -628,10 +628,6 @@ bool SMUSHVideo::handleSoundFrame(uint32 type, uint32 size) {
 	SMUSHChannel *track = findAudioTrack(handle);
 
 	if (index == 0) {
-		// TODO: Loop tracks (RA2 uses this)
-		if (flags & 0x40)
-			printf("STUB: Loop track?\n");
-
 		delete track;
 		track = new SAUDChannel(_audio, trackID, maxFrames, _audioRate);
 		_audioTracks[handle] = track;
