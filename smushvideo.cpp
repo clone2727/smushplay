@@ -56,7 +56,6 @@
 
 // SANM:
 // X-Wing Alliance/Grim Fandango/Racer: Should playback video fine
-// (May need to be gunzip'd first)
 // Infernal Machine: Untested
 // VIMA audio works
 
@@ -354,14 +353,14 @@ bool SMUSHVideo::handleFrame(GraphicsManager &gfx) {
 			// INSANE related
 			break;
 		case MKTAG('S', 'T', 'O', 'R'):
-			result = handleStore(size);
+			result = handleStore(subSize);
 			break;
 		case MKTAG('T', 'E', 'X', 'T'):
 		case MKTAG('T', 'R', 'E', 'S'):
 			// TODO: Text Resource
 			break;
 		case MKTAG('W', 'a', 'v', 'e'):
-			result = handleVIMA(size);
+			result = handleVIMA(subSize - 12);
 			break;
 		case MKTAG('X', 'P', 'A', 'L'):
 			result = handleDeltaPalette(gfx, subSize);
