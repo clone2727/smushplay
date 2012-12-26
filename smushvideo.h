@@ -27,7 +27,6 @@
 #define SMUSHVIDEO_H
 
 #include <map>
-#include <stdio.h>
 #include "graphicsman.h"
 #include "types.h"
 
@@ -35,6 +34,7 @@ class AudioManager;
 class Blocky16;
 class Codec37Decoder;
 class Codec47Decoder;
+class SeekableReadStream;
 class SMUSHChannel;
 class QueuingAudioStream;
 
@@ -61,7 +61,7 @@ public:
 	uint getHeight() const;
 
 private:
-	FILE *_file;
+	SeekableReadStream *_file;
 	uint _frameRate;
 
 	// Header

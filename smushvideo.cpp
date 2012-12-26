@@ -30,10 +30,10 @@
 #include "blocky16.h"
 #include "codec37.h"
 #include "codec47.h"
-#include "fileutil.h"
 #include "pcm.h"
 #include "smushchannel.h"
 #include "smushvideo.h"
+#include "stream.h"
 #include "util.h"
 #include "vima.h"
 
@@ -84,12 +84,12 @@ SMUSHVideo::~SMUSHVideo() {
 }
 
 bool SMUSHVideo::load(const char *fileName) {
-	_file = fopen(fileName, "rb");
+	_file = wrapCompressedReadStream(createReadStream(fileName));
 
 	if (!_file)
 		return false;
 
-	_mainTag = readUint32BE(_file);
+	_mainTag = _file->readUint32BE();
 	if (_mainTag == MKTAG('S', 'A', 'U', 'D')) {
 		fprintf(stderr, "Standalone SMUSH audio files not supported atm\n");
 		close();
@@ -100,7 +100,7 @@ bool SMUSHVideo::load(const char *fileName) {
 		return false;
 	}
 
-	readUint32BE(_file); // file size
+	_file->readUint32BE(); // file size
 
 	if (!readHeader()) {
 		fprintf(stderr, "Problem while reading SMUSH header\n");
@@ -134,7 +134,7 @@ void SMUSHVideo::close() {
 	_audio->stopAll();
 
 	if (_file) {
-		fclose(_file);
+		delete _file;
 		_file = 0;
 
 		delete[] _buffer;
@@ -230,19 +230,19 @@ void SMUSHVideo::play(GraphicsManager &gfx) {
 }
 
 bool SMUSHVideo::readHeader() {
-	uint32 tag = readUint32BE(_file);
-	uint32 size = readUint32BE(_file);
-	uint32 pos = ftell(_file);
+	uint32 tag = _file->readUint32BE();
+	uint32 size = _file->readUint32BE();
+	uint32 pos = _file->pos();
 
 	if (tag == MKTAG('A', 'H', 'D', 'R')) {
 		if (size < 0x306)
 			return false;
 
-		_version = readUint16LE(_file);
-		_frameCount = readUint16LE(_file);
-		readUint16LE(_file); // unknown
+		_version = _file->readUint16LE();
+		_frameCount = _file->readUint16LE();
+		_file->readUint16LE(); // unknown
 
-		fread(_palette, 1, 256 * 3, _file);
+		_file->read(_palette, 256 * 3);
 
 		if (_version == 2) {
 			// This seems to be the only difference between v1 and v2
@@ -251,9 +251,9 @@ bool SMUSHVideo::readHeader() {
 				return false;
 			}
 
-			_frameRate = readUint32LE(_file);
-			readUint32LE(_file);
-			_audioRate = readUint32LE(_file); // This isn't right for CMI? O_o -- Also doesn't guarantee audio
+			_frameRate = _file->readUint32LE();
+			_file->readUint32LE();
+			_audioRate = _file->readUint32LE(); // This isn't right for CMI? O_o -- Also doesn't guarantee audio
 			_audioChannels = 1; // FIXME: Is this right?
 		} else {
 			// TODO: Figure out proper values
@@ -262,19 +262,19 @@ bool SMUSHVideo::readHeader() {
 			_audioChannels = 1;
 		}
 
-		fseek(_file, pos + size + (size & 1), SEEK_SET);
+		_file->seek(pos + size + (size & 1), SEEK_SET);
 		return detectFrameSize();
 	} else if (tag == MKTAG('S', 'H', 'D', 'R')) {
-		readUint16LE(_file);
-		_frameCount = readUint32LE(_file);
-		readUint16LE(_file);
-		_width = readUint16LE(_file);
+		_file->readUint16LE();
+		_frameCount = _file->readUint32LE();
+		_file->readUint16LE();
+		_width = _file->readUint16LE();
 		_pitch = _width * 2;
-		_height = readUint16LE(_file);
-		readUint16LE(_file);
-		_frameRate = readUint32LE(_file);
-		/* _flags = */ readUint16LE(_file);
-		fseek(_file, pos + size + (size & 1), SEEK_SET);
+		_height = _file->readUint16LE();
+		_file->readUint16LE();
+		_frameRate = _file->readUint32LE();
+		/* _flags = */ _file->readUint16LE();
+		_file->seek(pos + size + (size & 1), SEEK_SET);
 		return readFrameHeader();
 	}
 
@@ -283,17 +283,17 @@ bool SMUSHVideo::readHeader() {
 }
 
 bool SMUSHVideo::handleFrame(GraphicsManager &gfx) {
-	uint32 tag = readUint32BE(_file);
-	uint32 size = readUint32BE(_file);
-	uint32 pos = ftell(_file);
+	uint32 tag = _file->readUint32BE();
+	uint32 size = _file->readUint32BE();
+	uint32 pos = _file->pos();
 
 	if (tag == MKTAG('A', 'N', 'N', 'O')) {
 		// Skip over any ANNO tag
 		// (SANM only)
-		fseek(_file, pos + size + (size & 1), SEEK_SET);
-		tag = readUint32BE(_file);
-		size = readUint32BE(_file);
-		pos = ftell(_file);
+		_file->seek(pos + size + (size & 1), SEEK_SET);
+		tag = _file->readUint32BE();
+		size = _file->readUint32BE();
+		pos = _file->pos();
 	}
 
 	// Now we have to be at FRME
@@ -302,11 +302,11 @@ bool SMUSHVideo::handleFrame(GraphicsManager &gfx) {
 
 	uint32 bytesLeft = size;
 	while (bytesLeft > 0) {
-		uint32 subType = readUint32BE(_file);
-		uint32 subSize = readUint32BE(_file);
-		uint32 subPos = ftell(_file);
+		uint32 subType = _file->readUint32BE();
+		uint32 subSize = _file->readUint32BE();
+		uint32 subPos = _file->pos();
 
-		if (feof(_file)) {
+		if (_file->eos()) {
 			// HACK: L2PLAY.ANM from Rebel Assault seems to have an unaligned FOBJ :/
 			fprintf(stderr, "Unexpected end of file!\n");
 			return false;
@@ -379,10 +379,10 @@ bool SMUSHVideo::handleFrame(GraphicsManager &gfx) {
 			return false;
 
 		bytesLeft -= subSize + 8 + (subSize & 1);
-		fseek(_file, subPos + subSize + (subSize & 1), SEEK_SET);
+		_file->seek(subPos + subSize + (subSize & 1), SEEK_SET);
 	}
 
-	fseek(_file, pos + size + (size & 1), SEEK_SET);
+	_file->seek(pos + size + (size & 1), SEEK_SET);
 	return true;
 }
 
@@ -394,7 +394,7 @@ bool SMUSHVideo::handleNewPalette(GraphicsManager &gfx, uint32 size) {
 		return false;
 	}
 
-	fread(_palette, 1, 256 * 3, _file);
+	_file->read(_palette, 256 * 3);
 	gfx.setPalette(_palette, 0, 256);
 	return true;
 }
@@ -412,12 +412,12 @@ bool SMUSHVideo::handleDeltaPalette(GraphicsManager &gfx, uint32 size) {
 	// Decode a delta palette
 
 	if (size == 256 * 3 * 3 + 4) {
-		fseek(_file, 4, SEEK_CUR);
+		_file->seek(4, SEEK_CUR);
 
 		for (uint16 i = 0; i < 256 * 3; i++)
-			_deltaPalette[i] = readUint16LE(_file);
+			_deltaPalette[i] = _file->readUint16LE();
 
-		fread(_palette, 1, 256 * 3, _file);
+		_file->read(_palette, 256 * 3);
 		gfx.setPalette(_palette, 0, 256);
 		return true;
 	} else if (size == 6 || size == 4) {
@@ -428,10 +428,10 @@ bool SMUSHVideo::handleDeltaPalette(GraphicsManager &gfx, uint32 size) {
 		return true;
 	} else if (size == 256 * 3 * 2 + 4) {
 		// SMUSH v1 only
-		fseek(_file, 4, SEEK_CUR);
+		_file->seek(4, SEEK_CUR);
 
 		for (uint16 i = 0; i < 256 * 3; i++)
-			_deltaPalette[i] = readUint16LE(_file);
+			_deltaPalette[i] = _file->readUint16LE();
 		return true;
 	}
 
@@ -450,14 +450,14 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, uint32 size) {
 	if (size < 14)
 		return false;
 
-	byte codec = readByte(_file);
-	/* byte codecParam = */ readByte(_file);
-	int16 left = readSint16LE(_file);
-	int16 top = readSint16LE(_file);
-	uint16 width = readUint16LE(_file);
-	uint16 height = readUint16LE(_file);
-	readUint16LE(_file);
-	readUint16LE(_file);
+	byte codec = _file->readByte();
+	/* byte codecParam = */ _file->readByte();
+	int16 left = _file->readSint16LE();
+	int16 top = _file->readSint16LE();
+	uint16 width = _file->readUint16LE();
+	uint16 height = _file->readUint16LE();
+	_file->readUint16LE();
+	_file->readUint16LE();
 
 	size -= 14;
 	
@@ -490,7 +490,7 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, uint32 size) {
 		break;
 	case 37: {
 		byte *ptr = new byte[size];
-		fread(ptr, 1, size, _file);
+		_file->read(ptr, size);
 
 		if (!_codec37)
 			_codec37 = new Codec37Decoder(width, height);
@@ -505,7 +505,7 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, uint32 size) {
 	case 47: {
 		// The original "blocky" codec
 		byte *ptr = new byte[size];
-		fread(ptr, 1, size, _file);
+		_file->read(ptr, size);
 
 		if (!_codec47)
 			_codec47 = new Codec47Decoder(width, height);
@@ -559,16 +559,16 @@ bool SMUSHVideo::handleFetch(uint32 size) {
 void SMUSHVideo::decodeCodec1(int left, int top, uint width, uint height) {
 	// This is very similar to the bomp compression
 	for (uint y = 0; y < height; y++) {
-		uint16 lineSize = readUint16LE(_file);
+		uint16 lineSize = _file->readUint16LE();
 		byte *dst = _buffer + (top + y) * _pitch + left;
 
 		while (lineSize > 0) {
-			byte code = readByte(_file);
+			byte code = _file->readByte();
 			lineSize--;
 			byte length = (code >> 1) + 1;
 
 			if (code & 1) {
-				byte val = readByte(_file);
+				byte val = _file->readByte();
 				lineSize--;
 
 				if (val != 0)
@@ -579,7 +579,7 @@ void SMUSHVideo::decodeCodec1(int left, int top, uint width, uint height) {
 				lineSize -= length;
 
 				while (length--) {
-					byte val = readByte(_file);
+					byte val = _file->readByte();
 
 					if (val)
 						*dst = val;
@@ -610,17 +610,17 @@ bool SMUSHVideo::handleSoundFrame(uint32 type, uint32 size) {
 		detectSoundHeaderType();
 
 	if (_oldSoundHeader) {
-		trackID = readUint32BE(_file);
-		index = readUint32BE(_file);
-		maxFrames = readUint32BE(_file);
+		trackID = _file->readUint32BE();
+		index = _file->readUint32BE();
+		maxFrames = _file->readUint32BE();
 		size -= 12;
 	} else {
-		trackID = readUint16LE(_file);
-		index = readUint16LE(_file);
-		maxFrames = readUint16LE(_file);
-		flags = readUint16LE(_file);
-		vol = readByte(_file);
-		pan = (int8)readByte(_file);
+		trackID = _file->readUint16LE();
+		index = _file->readUint16LE();
+		maxFrames = _file->readUint16LE();
+		flags = _file->readUint16LE();
+		vol = _file->readByte();
+		pan = (int8)_file->readByte();
 		size -= 10;
 	}
 
@@ -647,7 +647,7 @@ bool SMUSHVideo::handleSoundFrame(uint32 type, uint32 size) {
 	track->setBalance(pan);
 
 	byte *data = new byte[size];
-	fread(data, 1, size, _file);
+	_file->read(data, size);
 
 	track->appendData(index, data, size); 
 
@@ -659,27 +659,27 @@ void SMUSHVideo::detectSoundHeaderType() {
 	// for the newer header and that the first chunk in the old header
 	// will have index = 0 (which seems to be pretty safe).
 
-	readUint32BE(_file);
-	_oldSoundHeader = (readUint32BE(_file) == 0);
+	_file->readUint32BE();
+	_oldSoundHeader = (_file->readUint32BE() == 0);
 
-	fseek(_file, -8, SEEK_CUR);
+	_file->seek(-8, SEEK_CUR);
 	_runSoundHeaderCheck = true;
 }
 
 bool SMUSHVideo::readFrameHeader() {
 	// SANM frame header
 
-	if (readUint32BE(_file) != MKTAG('F', 'L', 'H', 'D'))
+	if (_file->readUint32BE() != MKTAG('F', 'L', 'H', 'D'))
 		return false;
 
-	uint32 size = readUint32BE(_file);
-	uint32 pos = ftell(_file);
+	uint32 size = _file->readUint32BE();
+	uint32 pos = _file->pos();
 	uint32 bytesLeft = size;
 
 	while (bytesLeft > 0) {
-		uint32 subType = readUint32BE(_file);
-		uint32 subSize = readUint32BE(_file);
-		uint32 subPos = ftell(_file);
+		uint32 subType = _file->readUint32BE();
+		uint32 subSize = _file->readUint32BE();
+		uint32 subPos = _file->pos();
 
 		bool result = true;
 
@@ -688,8 +688,8 @@ bool SMUSHVideo::readFrameHeader() {
 			// Nothing to do
 			break;
 		case MKTAG('W', 'a', 'v', 'e'):
-			_audioRate = readUint32LE(_file);
-			_audioChannels = readUint32LE(_file);
+			_audioRate = _file->readUint32LE();
+			_audioChannels = _file->readUint32LE();
 
 			// HACK: Based on what Residual does
 			// Seems the size is always 12 even when it's not :P
@@ -704,10 +704,10 @@ bool SMUSHVideo::readFrameHeader() {
 			return false;
 
 		bytesLeft -= subSize + 8 + (subSize & 1);
-		fseek(_file, subPos + subSize + (subSize & 1), SEEK_SET);
+		_file->seek(subPos + subSize + (subSize & 1), SEEK_SET);
 	}
 
-	fseek(_file, pos + size + (size & 1), SEEK_SET);
+	_file->seek(pos + size + (size & 1), SEEK_SET);
 	return true;
 }
 
@@ -717,10 +717,10 @@ bool SMUSHVideo::handleIACT(uint32 size) {
 	if (size < 8)
 		return false;
 
-	uint16 code = readUint16LE(_file);
-	uint16 flags = readUint16LE(_file);
-	/* int16 unknown = */ readSint16LE(_file);
-	uint16 trackFlags = readUint16LE(_file);
+	uint16 code = _file->readUint16LE();
+	uint16 flags = _file->readUint16LE();
+	/* int16 unknown = */ _file->readSint16LE();
+	uint16 trackFlags = _file->readUint16LE();
 
 	if (code == 8 && flags == 46) {
 		if (!_ranIACTSoundCheck)
@@ -748,10 +748,10 @@ bool SMUSHVideo::bufferIMuseAudio(uint32 size, uint16 trackFlags) {
 	// Queue iMuse audio (22050Hz)
 	// (As used by The Dig (only?))
 
-	uint16 trackID = readUint16LE(_file);
-	uint16 index = readUint16LE(_file);
-	uint16 frameCount = readUint16LE(_file);
-	/* uint32 bytesLeft = */ readUint32LE(_file);
+	uint16 trackID = _file->readUint16LE();
+	uint16 index = _file->readUint16LE();
+	uint16 frameCount = _file->readUint16LE();
+	/* uint32 bytesLeft = */ _file->readUint32LE();
 	size -= 18;
 
 	if (trackFlags == 1) {
@@ -786,7 +786,7 @@ bool SMUSHVideo::bufferIMuseAudio(uint32 size, uint16 trackFlags) {
 	}
 
 	byte *data = new byte[size];
-	fread(data, 1, size, _file);
+	_file->read(data, size);
 
 	track->appendData(index, data, size); 
 
@@ -805,10 +805,10 @@ bool SMUSHVideo::bufferIACTAudio(uint32 size) {
 		_iactBuffer = new byte[4096];
 	}
 
-	/* uint16 trackID = */ readUint16LE(_file);
-	/* uint16 index = */ readUint16LE(_file);
-	/* uint16 frameCount = */ readUint16LE(_file);
-	/* uint32 bytesLeft = */ readUint32LE(_file);
+	/* uint16 trackID = */ _file->readUint16LE();
+	/* uint16 index = */ _file->readUint16LE();
+	/* uint16 frameCount = */ _file->readUint16LE();
+	/* uint32 bytesLeft = */ _file->readUint32LE();
 	size -= 18;
 
 	while (size > 0) {
@@ -817,13 +817,13 @@ bool SMUSHVideo::bufferIACTAudio(uint32 size) {
 			length -= _iactPos;
 
 			if (length > size) {
-				fread(_iactBuffer + _iactPos, 1, size, _file);
+				_file->read(_iactBuffer + _iactPos, size);
 				_iactPos += size;
 				size = 0;
 			} else {
 				byte *output = new byte[4096];
 
-				fread(_iactBuffer + _iactPos, 1, length, _file);
+				_file->read(_iactBuffer + _iactPos, length);
 
 				byte *dst = output;
 				byte *src = _iactBuffer + 2;
@@ -861,12 +861,12 @@ bool SMUSHVideo::bufferIACTAudio(uint32 size) {
 			}
 		} else {
 			if (size > 1 && _iactPos == 0) {
-				_iactBuffer[0] = readByte(_file);
+				_iactBuffer[0] = _file->readByte();
 				_iactPos = 1;
 				size--;
 			}
 
-			_iactBuffer[_iactPos] = readByte(_file);
+			_iactBuffer[_iactPos] = _file->readByte();
 			_iactPos++;
 			size--;
 		}
@@ -889,9 +889,9 @@ bool SMUSHVideo::handleGhost(uint32 size) {
 	// FNFINAL.ANM: 28, 182, 0
 	// Level 5: 28, -190, 20
 
-	/* uint32 unk1 = */ readUint32BE(_file);
-	/* int32 unk2 = */ readSint32BE(_file);
-	/* int32 unk3 = */ readSint32BE(_file);
+	/* uint32 unk1 = */ _file->readUint32BE();
+	/* int32 unk2 = */ _file->readSint32BE();
+	/* int32 unk3 = */ _file->readSint32BE();
 
 	// unk2 seems to be the 'startX' parameter at least in FNFINAL.
 	// It copies to startX through _width from (_width - startX) to 0
@@ -907,24 +907,24 @@ bool SMUSHVideo::handleGhost(uint32 size) {
 void SMUSHVideo::decodeCodec21(int left, int top, uint width, uint height) {
 	for (uint y = 0; y < height; y++) {
 		byte *dst = _buffer + _pitch * (y + top) + left;
-		uint16 lineSize = readUint16LE(_file);
-		uint32 pos = ftell(_file);
+		uint16 lineSize = _file->readUint16LE();
+		uint32 pos = _file->pos();
 
 		int len = width;
 		do {
-			int offs = readUint16LE(_file);
+			int offs = _file->readUint16LE();
 			dst += offs;
 			len -= offs;
 			if (len <= 0)
 				break;
 
-			int w = readUint16LE(_file) + 1;
+			int w = _file->readUint16LE() + 1;
 			len -= w;
 			if (len < 0)
 				w += len;
 
 			for (int i = 0; i < w; i++) {
-				byte color = readByte(_file);
+				byte color = _file->readByte();
 
 				if (color != 0)
 					*dst = color;
@@ -933,7 +933,7 @@ void SMUSHVideo::decodeCodec21(int left, int top, uint width, uint height) {
 			}
 		} while (len > 0);
 
-		fseek(_file, pos + lineSize, SEEK_SET);
+		_file->seek(pos + lineSize, SEEK_SET);
 	}
 }
 
@@ -944,7 +944,7 @@ bool SMUSHVideo::handleBlocky16(GraphicsManager &gfx, uint32 size) {
 	}
 
 	byte *ptr = new byte[size];
-	fread(ptr, 1, size, _file);
+	_file->read(ptr, size);
 
 	if (!_blocky16)
 		_blocky16 = new Blocky16(_width, _height);
@@ -974,7 +974,7 @@ bool SMUSHVideo::detectFrameSize() {
 	// Most of this is for detecting the total frame size of a Rebel Assault
 	// video which is a lot harder.
 
-	uint32 startPos = ftell(_file);
+	uint32 startPos = _file->pos();
 	bool done = false;
 
 	// Only go through a certain amount of frames
@@ -983,32 +983,32 @@ bool SMUSHVideo::detectFrameSize() {
 		maxFrames = _frameCount;
 
 	for (uint i = 0; i < maxFrames && !done; i++) {
-		if (readUint32BE(_file) != MKTAG('F', 'R', 'M', 'E'))
+		if (_file->readUint32BE() != MKTAG('F', 'R', 'M', 'E'))
 			return false;
 
-		uint32 frameSize = readUint32BE(_file);
+		uint32 frameSize = _file->readUint32BE();
 		uint32 bytesLeft = frameSize;
 
 		while (bytesLeft > 0) {
-			uint32 subType = readUint32BE(_file);
-			uint32 subSize = readUint32BE(_file);
-			uint32 subPos = ftell(_file);
+			uint32 subType = _file->readUint32BE();
+			uint32 subSize = _file->readUint32BE();
+			uint32 subPos = _file->pos();
 
-			if (feof(_file)) {
+			if (_file->eos()) {
 				// HACK: L2PLAY.ANM from Rebel Assault seems to have an unaligned FOBJ :/
 				fprintf(stderr, "Unexpected end of file!\n");
 				return false;
 			}
 
 			if (subType == MKTAG('F', 'O', 'B', 'J')) {
-				byte codec = readByte(_file);
-				/* byte codecParam = */ readByte(_file);
-				int16 left = readSint16LE(_file);
-				int16 top = readSint16LE(_file);
-				uint16 width = readUint16LE(_file);
-				uint16 height = readUint16LE(_file);
-				readUint16LE(_file);
-				readUint16LE(_file);
+				byte codec = _file->readByte();
+				/* byte codecParam = */ _file->readByte();
+				int16 left = _file->readSint16LE();
+				int16 top = _file->readSint16LE();
+				uint16 width = _file->readUint16LE();
+				uint16 height = _file->readUint16LE();
+				_file->readUint16LE();
+				_file->readUint16LE();
 
 				if (width != 1 && height != 1) {
 					// HACK: Some Full Throttle videos start off with this. Don't
@@ -1049,14 +1049,14 @@ bool SMUSHVideo::detectFrameSize() {
 			}
 
 			bytesLeft -= subSize + 8 + (subSize & 1);
-			fseek(_file, subPos + subSize + (subSize & 1), SEEK_SET);
+			_file->seek(subPos + subSize + (subSize & 1), SEEK_SET);
 		}
 	}
 
 	if (_width == 0 || _height == 0)
 		return false;
 
-	fseek(_file, startPos, SEEK_SET);
+	_file->seek(startPos, SEEK_SET);
 	_pitch = _width;
 	_buffer = new byte[_pitch * _height];
 	memset(_buffer, 0, _pitch * _height); // FIXME: Is this right?
@@ -1080,16 +1080,16 @@ bool SMUSHVideo::handleVIMA(uint32 size) {
 		_audio->play(_iactStream);
 	}
 
-	uint32 decompressedSize = readUint32BE(_file);
+	uint32 decompressedSize = _file->readUint32BE();
 	if ((int32)decompressedSize < 0) {
 		// Residual is mum on documentation, but this seems to be some
 		// sort of extended-info chunk.
-		readUint32BE(_file);
-		decompressedSize = readUint32BE(_file);
+		_file->readUint32BE();
+		decompressedSize = _file->readUint32BE();
 	}
 
 	byte *src = new byte[size];
-	fread(src, 1, size, _file);
+	_file->read(src, size);
 
 	int16 *dst = new int16[decompressedSize * _audioChannels];
 	decompressVIMA(src, dst, decompressedSize * _audioChannels * 2, _vimaDestTable);
@@ -1118,9 +1118,9 @@ void SMUSHVideo::detectIACTType(uint flags) {
 	} else {
 		// Might be The Dig sound
 		// (Or just a regular IACT)
-		fseek(_file, 10, SEEK_CUR);
-		_hasIACTSound = readUint32BE(_file) == MKTAG('i', 'M', 'U', 'S');
-		fseek(_file, -14, SEEK_CUR);
+		_file->seek(10, SEEK_CUR);
+		_hasIACTSound = _file->readUint32BE() == MKTAG('i', 'M', 'U', 'S');
+		_file->seek(-14, SEEK_CUR);
 	}
 
 	_ranIACTSoundCheck = true;

@@ -25,6 +25,7 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <SDL_endian.h>
 #include "types.h"
 
 #define ARRAYSIZE(x) ((int)(sizeof(x) / sizeof(x[0])))
@@ -37,7 +38,41 @@ uint32 READ_LE_UINT32(const void *ptr);
 uint16 READ_BE_UINT16(const void *ptr);
 uint32 READ_BE_UINT32(const void *ptr);
 
+inline uint16 SWAP_BYTES_16(const uint16 a) {
+	return (a >> 8) | (a << 8);
+}
+
+inline uint32 SWAP_BYTES_32(uint32 a) {
+	const uint16 low = (uint16)a, high = (uint16)(a >> 16);
+	return ((uint32)(uint16)((low >> 8) | (low << 8)) << 16)
+			| (uint16)((high >> 8) | (high << 8));
+}
+
+#if SDL_BYTEORDER == SDL_LIL_ENDIAN
+	#define FROM_LE_16(a) ((uint16)(a))
+	#define FROM_LE_32(a) ((uint32)(a))
+
+	#define FROM_BE_16(a) SWAP_BYTES_16(a)
+	#define FROM_BE_32(a) SWAP_BYTES_32(a)
+#else
+	#define FROM_LE_16(a) SWAP_BYTES_16(a)
+	#define FROM_LE_32(a) SWAP_BYTES_32(a)
+
+	#define FROM_BE_16(a) ((uint16)(a))
+	#define FROM_BE_32(a) ((uint32)(a))
+#endif
+
+#ifdef MIN
+#undef MIN
+#endif
+
+#ifdef MAX
+#undef MAX
+#endif
+
 template<typename T> inline T ABS(T x) { return (x >= 0) ? x : -x; }
+template<typename T> inline T MIN (T a, T b) { return (a<b) ? a : b; }
+template<typename T> inline T MAX (T a, T b) { return (a>b) ? a : b; }
 template<typename T> inline void SWAP(T &a, T &b) { T tmp = a; a = b; b = tmp; }
 template<typename T> inline T CLIP(T v, T amin, T amax) {
 	if (v < amin)

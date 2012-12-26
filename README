@@ -8,8 +8,9 @@ What is it?
 How do I build it?
 ******************
 	1) Have SDL installed on your system
-	2) Type 'make'
-	3) If that doesn't work, submit a pull request that fixes it
+	2) Have zlib installed on your system
+	3) Type 'make'
+	4) If that doesn't work, submit a pull request that fixes it
 
 How do I use it?
 ****************
