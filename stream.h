@@ -250,6 +250,49 @@ public:
 	virtual bool seek(int32 offset, int whence = SEEK_SET) = 0;
 };
 
+/**
+ * Simple memory based 'stream', which implements the SeekableReadStream interface for
+ * a plain memory block.
+ */
+class MemoryReadStream : public SeekableReadStream {
+public:
+	/**
+	 * This constructor takes a pointer to a memory buffer and a length, and
+	 * wraps it. If disposeMemory is true, the MemoryReadStream takes ownership
+	 * of the buffer and hence deletes it when destructed.
+	 */
+	MemoryReadStream(const byte *dataPtr, uint32 dataSize, bool disposeMemory = false) :
+		_ptrOrig(dataPtr),
+		_ptr(dataPtr),
+		_size(dataSize),
+		_pos(0),
+		_disposeMemory(disposeMemory),
+		_eos(false) {}
+
+	~MemoryReadStream() {
+		if (_disposeMemory)
+			delete[] const_cast<byte *>(_ptrOrig);
+	}
+
+	uint32 read(void *dataPtr, uint32 dataSize);
+
+	bool eos() const { return _eos; }
+	void clearErr() { _eos = false; }
+
+	int32 pos() const { return _pos; }
+	int32 size() const { return _size; }
+
+	bool seek(int32 offs, int whence = SEEK_SET);
+
+private:
+	const byte * const _ptrOrig;
+	const byte *_ptr;
+	const uint32 _size;
+	uint32 _pos;
+	bool _disposeMemory;
+	bool _eos;
+};
+
 /** Open a file with a given path. */
 SeekableReadStream *createReadStream(const char *pathName);
 

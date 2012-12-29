@@ -32,6 +32,47 @@
 #error Version 1.2.0.4 or newer of zlib is required for this code
 #endif
 
+uint32 MemoryReadStream::read(void *dataPtr, uint32 dataSize) {
+	// Read at most as many bytes as are still available...
+	if (dataSize > _size - _pos) {
+		dataSize = _size - _pos;
+		_eos = true;
+	}
+	memcpy(dataPtr, _ptr, dataSize);
+
+	_ptr += dataSize;
+	_pos += dataSize;
+
+	return dataSize;
+}
+
+bool MemoryReadStream::seek(int32 offs, int whence) {
+	// Pre-Condition
+	assert(_pos <= _size);
+	switch (whence) {
+	case SEEK_END:
+		// SEEK_END works just like SEEK_SET, only 'reversed',
+		// i.e. from the end.
+		offs = _size + offs;
+		// Fall through
+	case SEEK_SET:
+		_ptr = _ptrOrig + offs;
+		_pos = offs;
+		break;
+
+	case SEEK_CUR:
+		_ptr += offs;
+		_pos += offs;
+		break;
+	}
+	// Post-Condition
+	assert(_pos <= _size);
+
+	// Reset end-of-stream flag on a successful seek
+	_eos = false;
+	return true;	// FIXME: STREAM REWRITE
+}
+
 class StdioStream : public SeekableReadStream {
 public:
 	StdioStream() {}
