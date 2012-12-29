@@ -98,13 +98,18 @@ private:
 	bool handleDeltaPalette(GraphicsManager &gfx, uint32 size);
 	bool handleSoundFrame(uint32 type, uint32 size);
 	bool handleVIMA(uint32 size);
+	bool handleZlibFrameObject(GraphicsManager &gfx, uint32 size);
 
 	// Codecs
-	void decodeCodec1(int left, int top, uint width, uint height);
-	void decodeCodec21(int left, int top, uint width, uint height);
+	bool handleFrameObject(GraphicsManager &gfx, SeekableReadStream *stream, uint32 size);
+	void decodeCodec1(SeekableReadStream *stream, int left, int top, uint width, uint height);
+	void decodeCodec21(SeekableReadStream *stream, int left, int top, uint width, uint height);
 	Codec37Decoder *_codec37;
 	Codec47Decoder *_codec47;
 	Blocky16 *_blocky16;
+
+	// ScummVM-specific
+	SeekableReadStream *decompressZlibFrameObject(uint32 size);
 
 	// Sound
 	bool _oldSoundHeader, _runSoundHeaderCheck;

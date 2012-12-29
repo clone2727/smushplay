@@ -25,6 +25,7 @@
 
 #include <SDL.h>
 #include <SDL_endian.h>
+#include <zlib.h>
 #include "audioman.h"
 #include "audiostream.h"
 #include "blocky16.h"
@@ -366,9 +367,9 @@ bool SMUSHVideo::handleFrame(GraphicsManager &gfx) {
 			result = handleDeltaPalette(gfx, subSize);
 			break;
 		case MKTAG('Z', 'F', 'O', 'B'):
-			// TODO: Zipped Frame Object (ScummVM-compressed)
-			fprintf(stderr, "ScummVM-compressed videos not supported\n");
-			return false;
+			// Zipped Frame Object (ScummVM-compressed)
+			result = handleZlibFrameObject(gfx, subSize);
+			break;
 		default:
 			// TODO: Other types
 			printf("\tSub Type: '%c%c%c%c'\n", LISTTAG(subType));
@@ -439,6 +440,21 @@ bool SMUSHVideo::handleDeltaPalette(GraphicsManager &gfx, uint32 size) {
 }
 
 bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, uint32 size) {
+	return handleFrameObject(gfx, _file, size);
+}
+
+bool SMUSHVideo::handleZlibFrameObject(GraphicsManager &gfx, uint32 size) {
+	SeekableReadStream *stream = decompressZlibFrameObject(size);
+
+	if (!stream)
+		return false;
+
+	bool result = handleFrameObject(gfx, stream, stream->size());
+	delete stream;
+	return result;
+}
+
+bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, SeekableReadStream *stream, uint32 size) {
 	// Decode a frame object
 
 	if (isHighColor()) {
@@ -449,14 +465,14 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, uint32 size) {
 	if (size < 14)
 		return false;
 
-	byte codec = _file->readByte();
-	/* byte codecParam = */ _file->readByte();
-	int16 left = _file->readSint16LE();
-	int16 top = _file->readSint16LE();
-	uint16 width = _file->readUint16LE();
-	uint16 height = _file->readUint16LE();
-	_file->readUint16LE();
-	_file->readUint16LE();
+	byte codec = stream->readByte();
+	/* byte codecParam = */ stream->readByte();
+	int16 left = stream->readSint16LE();
+	int16 top = stream->readSint16LE();
+	uint16 width = stream->readUint16LE();
+	uint16 height = stream->readUint16LE();
+	stream->readUint16LE();
+	stream->readUint16LE();
 
 	size -= 14;
 	
@@ -476,11 +492,11 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, uint32 size) {
 	switch (codec) {
 	case 1:
 	case 3:
-		decodeCodec1(left, top, width, height);
+		decodeCodec1(stream, left, top, width, height);
 		break;
 	case 21:
 	//case 44:
-		decodeCodec21(left, top, width, height);
+		decodeCodec21(stream, left, top, width, height);
 		break;
 	case 23:
 		// TODO: Used by Rebel Assault, Rebel Assault II, and Mortimer
@@ -489,7 +505,7 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, uint32 size) {
 		break;
 	case 37: {
 		byte *ptr = new byte[size];
-		_file->read(ptr, size);
+		stream->read(ptr, size);
 
 		if (!_codec37)
 			_codec37 = new Codec37Decoder(width, height);
@@ -504,7 +520,7 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, uint32 size) {
 	case 47: {
 		// The original "blocky" codec
 		byte *ptr = new byte[size];
-		_file->read(ptr, size);
+		stream->read(ptr, size);
 
 		if (!_codec47)
 			_codec47 = new Codec47Decoder(width, height);
@@ -555,19 +571,19 @@ bool SMUSHVideo::handleFetch(uint32 size) {
 	return size >= 6;
 }
 
-void SMUSHVideo::decodeCodec1(int left, int top, uint width, uint height) {
+void SMUSHVideo::decodeCodec1(SeekableReadStream *stream, int left, int top, uint width, uint height) {
 	// This is very similar to the bomp compression
 	for (uint y = 0; y < height; y++) {
-		uint16 lineSize = _file->readUint16LE();
+		uint16 lineSize = stream->readUint16LE();
 		byte *dst = _buffer + (top + y) * _pitch + left;
 
 		while (lineSize > 0) {
-			byte code = _file->readByte();
+			byte code = stream->readByte();
 			lineSize--;
 			byte length = (code >> 1) + 1;
 
 			if (code & 1) {
-				byte val = _file->readByte();
+				byte val = stream->readByte();
 				lineSize--;
 
 				if (val != 0)
@@ -578,7 +594,7 @@ void SMUSHVideo::decodeCodec1(int left, int top, uint width, uint height) {
 				lineSize -= length;
 
 				while (length--) {
-					byte val = _file->readByte();
+					byte val = stream->readByte();
 
 					if (val)
 						*dst = val;
@@ -903,27 +919,27 @@ bool SMUSHVideo::handleGhost(uint32 size) {
 	return true;
 }
 
-void SMUSHVideo::decodeCodec21(int left, int top, uint width, uint height) {
+void SMUSHVideo::decodeCodec21(SeekableReadStream *stream, int left, int top, uint width, uint height) {
 	for (uint y = 0; y < height; y++) {
 		byte *dst = _buffer + _pitch * (y + top) + left;
-		uint16 lineSize = _file->readUint16LE();
-		uint32 pos = _file->pos();
+		uint16 lineSize = stream->readUint16LE();
+		uint32 pos = stream->pos();
 
 		int len = width;
 		do {
-			int offs = _file->readUint16LE();
+			int offs = stream->readUint16LE();
 			dst += offs;
 			len -= offs;
 			if (len <= 0)
 				break;
 
-			int w = _file->readUint16LE() + 1;
+			int w = stream->readUint16LE() + 1;
 			len -= w;
 			if (len < 0)
 				w += len;
 
 			for (int i = 0; i < w; i++) {
-				byte color = _file->readByte();
+				byte color = stream->readByte();
 
 				if (color != 0)
 					*dst = color;
@@ -932,7 +948,7 @@ void SMUSHVideo::decodeCodec21(int left, int top, uint width, uint height) {
 			}
 		} while (len > 0);
 
-		_file->seek(pos + lineSize, SEEK_SET);
+		stream->seek(pos + lineSize, SEEK_SET);
 	}
 }
 
@@ -999,15 +1015,21 @@ bool SMUSHVideo::detectFrameSize() {
 				return false;
 			}
 
-			if (subType == MKTAG('F', 'O', 'B', 'J')) {
-				byte codec = _file->readByte();
-				/* byte codecParam = */ _file->readByte();
-				int16 left = _file->readSint16LE();
-				int16 top = _file->readSint16LE();
-				uint16 width = _file->readUint16LE();
-				uint16 height = _file->readUint16LE();
-				_file->readUint16LE();
-				_file->readUint16LE();
+			if (subType == MKTAG('F', 'O', 'B', 'J') || subType == MKTAG('Z', 'F', 'O', 'B')) {
+				SeekableReadStream *stream = _file;
+
+				// Decompress, if ZFOB
+				if (subType == MKTAG('Z', 'F', 'O', 'B'))
+					stream = decompressZlibFrameObject(subSize);
+
+				byte codec = stream->readByte();
+				/* byte codecParam = */ stream->readByte();
+				int16 left = stream->readSint16LE();
+				int16 top = stream->readSint16LE();
+				uint16 width = stream->readUint16LE();
+				uint16 height = stream->readUint16LE();
+				stream->readUint16LE();
+				stream->readUint16LE();
 
 				if (width != 1 && height != 1) {
 					// HACK: Some Full Throttle videos start off with this. Don't
@@ -1018,33 +1040,35 @@ bool SMUSHVideo::detectFrameSize() {
 						_width = width;
 						_height = height;
 						done = true;
-						break;
+					} else {
+						// FIXME: Just take other codecs at face value for now too
+						// (This basically only affects Rebel Assault and NUT files)
+						_width = width;
+						if (left > 0)
+							_width += left;
+
+						_height = height;
+						if (top > 0)
+							_height += top;
+
+						// Try to figure how close we are to 320x200 and see if maybe
+						// this object is a partial frame object.
+						// TODO: Not ready for primetime yet
+						/*if (_width < 320 && _width > 310)
+							_width = 320;
+						if (height < 200 && _height > 190)
+							_height = 200;*/
+
+						done = true;
 					}
-
-					// FIXME: Just take other codecs at face value for now too
-					// (This basically only affects Rebel Assault and NUT files)
-					_width = width;
-					if (left > 0)
-						_width += left;
-
-					_height = height;
-					if (top > 0)
-						_height += top;
-
-					// Try to figure how close we are to 320x200 and see if maybe
-					// this object is a partial frame object.
-					// TODO: Not ready for primetime yet
-					/*if (_width < 320 && _width > 310)
-						_width = 320;
-					if (height < 200 && _height > 190)
-						_height = 200;*/
-
-					done = true;
-					break;
 				}
-			} else if (subType == MKTAG('Z', 'F', 'O', 'B')) {
-				fprintf(stderr, "ScummVM-compressed videos not supported\n");
-				return false;
+
+				// We decompressed the frame, now we don't need it anymore
+				if (subType == MKTAG('Z', 'F', 'O', 'B'))
+					delete stream;
+
+				if (done)
+					break;
 			}
 
 			bytesLeft -= subSize + 8 + (subSize & 1);
@@ -1123,6 +1147,26 @@ void SMUSHVideo::detectIACTType(uint flags) {
 	}
 
 	_ranIACTSoundCheck = true;
+}
+
+SeekableReadStream *SMUSHVideo::decompressZlibFrameObject(uint32 size) {
+	unsigned long decompressedSize = _file->readUint32BE();
+	byte *decompressedData = new byte[decompressedSize];
+
+	unsigned long compressedSize = size - 4;
+	byte *compressedData = new byte[compressedSize];
+	_file->read(compressedData, compressedSize);
+
+	if (uncompress(decompressedData, &decompressedSize, compressedData, compressedSize) != Z_OK) {
+		fprintf(stderr, "Failed to decompress zlib frame object\n");
+		delete[] decompressedData;
+		delete[] compressedData;
+		return 0;
+	}
+
+	delete[] compressedData;
+
+	return new MemoryReadStream(decompressedData, decompressedSize, true);
 }
 
 // Just a simple < operator for our three values
