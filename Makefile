@@ -20,7 +20,7 @@ all:
 	g++ $(INCLUDES) -Wall -g -c smushchannel.cpp -o smushchannel.o
 	g++ $(INCLUDES) -Wall -g -c saudchannel.cpp -o saudchannel.o
 	g++ $(INCLUDES) -Wall -g -c imusechannel.cpp -o imusechannel.o
-	g++ $(LIBS) -o smushplay smushplay.o graphicsman.o stream.o smushvideo.o codec37.o codec47.o blocky16.o util.o audioman.o audiostream.o rate.o pcm.o vima.o smushchannel.o saudchannel.o imusechannel.o
+	g++ -o smushplay smushplay.o graphicsman.o stream.o smushvideo.o codec37.o codec47.o blocky16.o util.o audioman.o audiostream.o rate.o pcm.o vima.o smushchannel.o saudchannel.o imusechannel.o $(LIBS)
 
 clean:
 	rm -f *.o
