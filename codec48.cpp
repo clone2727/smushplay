@@ -38,8 +38,6 @@ Codec48Decoder::~Codec48Decoder() {
 bool Codec48Decoder::decode(byte *dst, const byte *src) {
 	const byte *gfxData = src + 0x10;
 
-	// No idea what it means, but it's the only bit in the header different in this case
-	// Maybe delta data loaded in?
 	if (src[12] & (1 << 3))
 		gfxData += 0x8080;
 
@@ -47,15 +45,19 @@ bool Codec48Decoder::decode(byte *dst, const byte *src) {
 
 	switch (src[0]) {
 	case 0:
-		// Intraframe
+		// Raw frame
 		memcpy(dst, gfxData, _frameSize);
 		break;
+	case 1:
+		// Probably raw frame, 1/4 size
+		// Never used in MotS
+		break;
 	case 2:
-		// Unknown, happens in frequently
-		printf("STUB: Implement codec 48 frame type 2\n");
+		// Blast object
+		bompDecodeLine(dst, gfxData, _frameSize);
 		break;
 	case 3:
-		// Unknown, happens a lot
+		// Delta encoding; looks similar to codec 47's
 		printf("STUB: Implement codec 48 frame type 3\n");
 		break;
 	default:
@@ -64,4 +66,26 @@ bool Codec48Decoder::decode(byte *dst, const byte *src) {
 	}
 
 	return true;
+}
+
+void Codec48Decoder::bompDecodeLine(byte *dst, const byte *src, int len) {
+	while (len > 0) {
+		byte code = *src++;
+		byte num = (code >> 1) + 1;
+
+		if (num > len)
+			num = len;
+
+		len -= num;
+
+		if (code & 1) {
+			byte color = *src++;
+			memset(dst, color, num);
+		} else {
+			memcpy(dst, src, num);
+			src += num;
+		}
+
+		dst += num;
+	}
 }

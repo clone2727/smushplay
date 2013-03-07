@@ -32,6 +32,8 @@ public:
 	bool decode(byte *dst, const byte *src);
 
 private:
+	void bompDecodeLine(byte *dst, const byte *src, int len);
+
 	int32 _frameSize;
 	int _width, _height;
 };
