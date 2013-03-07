@@ -34,6 +34,7 @@ class AudioManager;
 class Blocky16;
 class Codec37Decoder;
 class Codec47Decoder;
+class Codec48Decoder;
 class SeekableReadStream;
 class SMUSHChannel;
 class QueuingAudioStream;
@@ -106,6 +107,7 @@ private:
 	void decodeCodec21(SeekableReadStream *stream, int left, int top, uint width, uint height);
 	Codec37Decoder *_codec37;
 	Codec47Decoder *_codec47;
+	Codec48Decoder *_codec48;
 	Blocky16 *_blocky16;
 
 	// ScummVM-specific

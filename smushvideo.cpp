@@ -31,6 +31,7 @@
 #include "blocky16.h"
 #include "codec37.h"
 #include "codec47.h"
+#include "codec48.h"
 #include "pcm.h"
 #include "smushchannel.h"
 #include "smushvideo.h"
@@ -67,6 +68,7 @@ SMUSHVideo::SMUSHVideo(AudioManager &audio) : _audio(&audio) {
 	_storeFrame = false;
 	_codec37 = 0;
 	_codec47 = 0;
+	_codec48 = 0;
 	_blocky16 = 0;
 	_runSoundHeaderCheck = false;
 	_ranIACTSoundCheck = false;
@@ -148,6 +150,9 @@ void SMUSHVideo::close() {
 
 		delete _codec47;
 		_codec47 = 0;
+
+		delete _codec48;
+		_codec48 = 0;
 
 		delete _blocky16;
 		_blocky16 = 0;
@@ -528,11 +533,18 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, SeekableReadStream *str
 		_codec47->decode(_buffer, ptr);
 		delete[] ptr;
 		} break;
-	case 48:
-		// TODO: Used by Mysteries of the Sith
+	case 48: {
+		// Used by Mysteries of the Sith
 		// Seems similar to codec 47
-		printf("Unhandled codec 48 frame object\n");
-		break;
+		byte *ptr = new byte[size];
+		stream->read(ptr, size);
+
+		if (!_codec48)
+			_codec48 = new Codec48Decoder(width, height);
+
+		_codec48->decode(_buffer, ptr);
+		delete[] ptr;
+		} break;
 	default:
 		// TODO: Lots of other Rebel Assault ones
 		// They look like a terrible compression
