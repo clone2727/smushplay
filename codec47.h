@@ -41,6 +41,7 @@ private:
 	void level3(byte *d_dst);
 	void decode2(byte *dst, const byte *src, int width, int height, const byte *paramPtr);
 	void bompDecodeLine(byte *dst, const byte *src, int len);
+	void scaleFrame(byte *dst, const byte *src);
 
 	int32 _deltaSize;
 	byte *_deltaBufs[2];
@@ -56,6 +57,7 @@ private:
 	int16 _table[256];
 	int32 _frameSize;
 	int _width, _height;
+	byte *_interTable;
 };
 
 #endif

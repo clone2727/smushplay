@@ -45,25 +45,14 @@ Codec47Decoder::Codec47Decoder(int width, int height) {
 	_deltaBufs[0] = _deltaBuf;
 	_deltaBufs[1] = _deltaBuf + _frameSize;
 	_curBuf = _deltaBuf + _frameSize * 2;
+	_interTable = 0;
 }
 
 Codec47Decoder::~Codec47Decoder() {
-	if (_tableBig) {
-		delete[] _tableBig;
-		_tableBig = 0;
-	}
-	if (_tableSmall) {
-		delete[] _tableSmall;
-		_tableSmall = 0;
-	}
-	_lastTableWidth = -1;
-	if (_deltaBuf) {
-		delete[] _deltaBuf;
-		_deltaSize = 0;
-		_deltaBuf = 0;
-		_deltaBufs[0] = 0;
-		_deltaBufs[1] = 0;
-	}
+	delete[] _tableBig;
+	delete[] _tableSmall;
+	delete[] _deltaBuf;
+	delete[] _interTable;
 }
 
 bool Codec47Decoder::decode(byte *dst, const byte *src) {
@@ -75,7 +64,7 @@ bool Codec47Decoder::decode(byte *dst, const byte *src) {
 
 	int32 seq_nb = READ_LE_UINT16(src + 0);
 
-	const byte *gfx_data = src + 26;
+	const byte *gfxData = src + 26;
 
 	if (seq_nb == 0) {
 		makeTables47(_width);
@@ -85,30 +74,40 @@ bool Codec47Decoder::decode(byte *dst, const byte *src) {
 	}
 
 	if ((src[4] & 1) != 0) {
-		gfx_data += 32896;
+		// Interpolation table present
+		if (!_interTable)
+			_interTable = new byte[65536];
+
+		byte *ptr = _interTable;
+
+		for (int i = 0; i < 256; i++) {
+			byte *ptr1 = ptr + i;
+			byte *ptr2 = ptr + i;
+
+			for (int j = 256 - i; j > 0; j--) {
+				byte pixel = *gfxData++;
+				*ptr2 = pixel;
+				*ptr1++ = pixel;
+				ptr2 += 256;
+			}
+
+			ptr += 256;
+		}
 	}
 
 	switch (src[2]) {
 	case 0:
 		// Intraframe
-		memcpy(_curBuf, gfx_data, _frameSize);
+		memcpy(_curBuf, gfxData, _frameSize);
 		break;
 	case 1:
 		// Intraframe, 1/4 size
 		// (Outlaws only?)
-		for (int y = 0; y < _height; y += 2) {
-			for (int x = 0; x < _width; x += 2) {
-				byte color = *gfx_data++;
-				_curBuf[y * _width + x] = color;
-				_curBuf[y * _width + x + 1] = color;
-				_curBuf[(y + 1) * _width + x] = color;
-				_curBuf[(y + 1) * _width + x + 1] = color;
-			}
-		}
+		scaleFrame(_curBuf, gfxData);
 		break;
 	case 2:
 		if (seq_nb == _prevSeqNb + 1) {
-			decode2(_curBuf, gfx_data, _width, _height, src + 8);
+			decode2(_curBuf, gfxData, _width, _height, src + 8);
 		}
 		break;
 	case 3:
@@ -118,7 +117,7 @@ bool Codec47Decoder::decode(byte *dst, const byte *src) {
 		memcpy(_curBuf, _deltaBufs[0], _frameSize);
 		break;
 	case 5:
-		bompDecodeLine(_curBuf, gfx_data, READ_LE_UINT32(src + 14));
+		bompDecodeLine(_curBuf, gfxData, READ_LE_UINT32(src + 14));
 		break;
 	}
 
@@ -612,5 +611,42 @@ void Codec47Decoder::bompDecodeLine(byte *dst, const byte *src, int len) {
 		}
 
 		dst += num;
+	}
+}
+
+void Codec47Decoder::scaleFrame(byte *dst, const byte *src) {
+	byte *ptr = dst + _width;
+
+	// Interpolate the odd rows first
+	for (int y = 0; y < _height; y += 2) {
+		// The first two pixels are not interpolated
+		uint16 pixel = *src++;
+		*ptr++ = pixel;
+		*ptr++ = pixel;
+
+		for (int x = 2; x < _width; x += 2) {
+			// The first pixel of each duplet is not interpolated
+			// The second pixel is interpolated from the last one and the new one
+			pixel <<= 8;
+			pixel |= *src++;
+			*ptr++ = _interTable[pixel];
+			*ptr++ = pixel & 0xFF;
+		}
+	
+		ptr += _width;
+	}
+
+	// The first row doesn't get interpolated, it's just a copy of the second row
+	memcpy(dst, dst + _width, _width);
+	ptr = dst + _width * 2;
+
+	// Interpolate the even rows based on the odd rows
+	for (int y = 2; y < _height; y += 2) {
+		for (int x = 0; x < _width; x++) {
+			*ptr = _interTable[(ptr[_width] << 8) | ptr[-_width]];
+			ptr++;
+		}
+
+		ptr += _width;
 	}
 }
