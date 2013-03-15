@@ -49,8 +49,7 @@
 // ANIM:
 // Rebel Assault: Decodes a few videos, missing several codecs, missing ghost support, missing negative coordinate handling
 // Rebel Assault II: Decodes most videos, missing at least one codec
-// The Dig/Full Throttle/CMI/Shadows of the Empire/Grim Demo/Outlaws: Decodes all videos
-// Mysteries of the Sith: Missing codec 48
+// The Dig/Full Throttle/CMI/Shadows of the Empire/Grim Demo/Outlaws/Mysteries of the Sith: Decodes all videos
 // Mortimer: Some videos work, but looks like it scales up low-res frames; missing codec 23
 // IACT audio (CMI/SotE/Grim Demo/Outlaws/MotS) works
 // iMuse audio (The Dig) works
