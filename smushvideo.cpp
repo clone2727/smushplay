@@ -354,6 +354,9 @@ bool SMUSHVideo::handleFrame(GraphicsManager &gfx) {
 		case MKTAG('P', 'V', 'O', 'C'):
 			result = handleSoundFrame(subType, subSize);
 			break;
+		case MKTAG('S', 'E', 'G', 'A'):
+			// TODO: Unknown, found in RA Sega CD
+			break;
 		case MKTAG('S', 'K', 'I', 'P'):
 			// INSANE related
 			break;
@@ -498,6 +501,19 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, SeekableReadStream *str
 	case 3:
 		decodeCodec1(stream, left, top, width, height);
 		break;
+	case 2:
+		// TODO: Used by Rebel Assault
+		// Think it's basically codec1
+		printf("Unhandled codec 2 frame object\n");
+		break;
+	case 4:
+		// TODO: Used by Rebel Assault
+		printf("Unhandled codec 4 frame object\n");
+		break;
+	case 5:
+		// TODO: Used by Rebel Assault
+		printf("Unhandled codec 5 frame object\n");
+		break;
 	case 21:
 	//case 44:
 		decodeCodec21(stream, left, top, width, height);
@@ -506,6 +522,22 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, SeekableReadStream *str
 		// TODO: Used by Rebel Assault, Rebel Assault II, and Mortimer
 		// Used for the blue transparent overlays
 		printf("Unhandled codec 23 frame object\n");
+		break;
+	case 31:
+		// TODO: Used by Rebel Assault Sega CD
+		printf("Unhandled codec 31 frame object\n");
+		break;
+	case 32:
+		// TODO: Used by Rebel Assault Sega CD
+		printf("Unhandled codec 32 frame object\n");
+		break;
+	case 33:
+		// TODO: Used by Rebel Assault Sega CD
+		printf("Unhandled codec 33 frame object\n");
+		break;
+	case 34:
+		// TODO: Used by Rebel Assault Sega CD
+		printf("Unhandled codec 34 frame object\n");
 		break;
 	case 37: {
 		byte *ptr = new byte[size];
