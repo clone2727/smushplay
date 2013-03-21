@@ -20,10 +20,10 @@ What videos are supported?
 **************************
 	Since there are many games out there using SMUSH, not all variants are supported right now. Here are games and their statuses:
 
-	* Rebel Assault (DOS)
+	* Rebel Assault (DOS/3DO/Mac)
 		Rebel Assault videos use the oldest version of SMUSH. Only a few of these videos play. Sound works.
 	* Rebel Assault (Sega CD)
-		No video. Sound works.
+		Only a few of these videos play. Sound works.
 	* Rebel Assault II
 		Most Rebel Assault II videos play properly, but there are some glitches. Sound works.
 	* Mortimer

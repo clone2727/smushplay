@@ -524,12 +524,10 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, SeekableReadStream *str
 		printf("Unhandled codec 23 frame object\n");
 		break;
 	case 31:
-		// TODO: Used by Rebel Assault Sega CD
-		printf("Unhandled codec 31 frame object\n");
+		decodeCodec31(stream, left, top, width, height);
 		break;
 	case 32:
-		// TODO: Used by Rebel Assault Sega CD
-		printf("Unhandled codec 32 frame object\n");
+		decodeCodec32(stream, left, top, width, height);
 		break;
 	case 33:
 		// TODO: Used by Rebel Assault Sega CD
@@ -1230,4 +1228,96 @@ bool operator<(const SMUSHTrackHandle &handle1, const SMUSHTrackHandle &handle2)
 		return true;
 
 	return false;
+}
+
+void SMUSHVideo::decodeCodec31(SeekableReadStream *stream, int left, int top, uint width, uint height) {
+	// SegaCD-modified codec1 - uses high and low nibbles of the value to output
+	// Maps to palette #1, with transparency
+
+	for (uint y = 0; y < height; y++) {
+		uint16 lineSize = stream->readUint16LE();
+		byte *dst = _buffer + (top + y) * _pitch + left;
+
+		while (lineSize > 0) {
+			byte code = stream->readByte();
+			lineSize--;
+			byte length = (code >> 1) + 1;
+
+			if (code & 1) {
+				byte val = stream->readByte();
+				lineSize--;
+
+				byte pixel1 = val & 0xF;
+				byte pixel2 = val >> 4;
+
+				for (int i = 0; i < length; i++) {
+					if (pixel1 != 0)
+						dst[0] = pixel1 + 224;
+
+					if (pixel2 != 0)
+						dst[1] = pixel2 + 224;
+
+					dst += 2;
+				}
+			} else {
+				lineSize -= length;
+
+				while (length--) {
+					byte val = stream->readByte();
+					byte pixel1 = val & 0xF;
+					byte pixel2 = val >> 4;
+
+					if (pixel1 != 0)
+						dst[0] = pixel1 + 224;
+
+					if (pixel2 != 0)
+						dst[1] = pixel2 + 224;
+
+					dst += 2;
+				}
+			}
+		}
+	}
+}
+
+void SMUSHVideo::decodeCodec32(SeekableReadStream *stream, int left, int top, uint width, uint height) {
+	// SegaCD-modified codec1 - uses high and low nibbles of the value to output
+	// Maps to palette #2, no transparency
+
+	for (uint y = 0; y < height; y++) {
+		uint16 lineSize = stream->readUint16LE();
+		byte *dst = _buffer + (top + y) * _pitch + left;
+
+		while (lineSize > 0) {
+			byte code = stream->readByte();
+			lineSize--;
+			byte length = (code >> 1) + 1;
+
+			if (code & 1) {
+				byte val = stream->readByte();
+				lineSize--;
+
+				byte pixel1 = val & 0xF;
+				byte pixel2 = val >> 4;
+
+				for (int i = 0; i < length; i++) {
+					dst[0] = pixel1 + 224 + 16;
+					dst[1] = pixel2 + 224 + 16;
+					dst += 2;
+				}
+			} else {
+				lineSize -= length;
+
+				while (length--) {
+					byte val = stream->readByte();
+					byte pixel1 = val & 0xF;
+					byte pixel2 = val >> 4;
+
+					dst[0] = pixel1 + 224 + 16;
+					dst[1] = pixel2 + 224 + 16;
+					dst += 2;
+				}
+			}
+		}
+	}
 }

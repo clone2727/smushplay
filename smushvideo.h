@@ -105,6 +105,8 @@ private:
 	bool handleFrameObject(GraphicsManager &gfx, SeekableReadStream *stream, uint32 size);
 	void decodeCodec1(SeekableReadStream *stream, int left, int top, uint width, uint height);
 	void decodeCodec21(SeekableReadStream *stream, int left, int top, uint width, uint height);
+	void decodeCodec31(SeekableReadStream *stream, int left, int top, uint width, uint height);
+	void decodeCodec32(SeekableReadStream *stream, int left, int top, uint width, uint height);
 	Codec37Decoder *_codec37;
 	Codec47Decoder *_codec47;
 	Codec48Decoder *_codec48;
