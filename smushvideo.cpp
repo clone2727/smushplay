@@ -599,17 +599,48 @@ bool SMUSHVideo::handleFrameObject(GraphicsManager &gfx, SeekableReadStream *str
 
 bool SMUSHVideo::handleStore(uint32 size) {
 	// Store the next frame object
+	// TODO: There's definitely a mechanism to grab more than just what's on
+	// the screen. RA's L3INTRO.ANM draws overlarge frames, then expects to
+	// later restore them, while moving them.
 	_storeFrame = true;
 	return size >= 4;
 }
 
 bool SMUSHVideo::handleFetch(uint32 size) {
-	// Restore an old frame object
+	// Restore an previous frame object
+	int32 xOffset = 0, yOffset = 0;
 
-	if (_storedFrame && _buffer)
-		memcpy(_buffer, _storedFrame, _pitch * _height);
+	// Skip the first uint32. It's some sort of index.
+	// After a STOR, the value is always -1. Then it increases
+	// by 1 each call after that.
+	if (size >= 4)
+		/* int32 u0 = */ _file->readSint32BE();
 
-	return size >= 6;
+	// Offset for drawing in the x direction
+	if (size >= 8)
+		xOffset = _file->readSint32BE();
+
+	// Offset for drawing in the y direction
+	if (size >= 12)
+		yOffset = _file->readSint32BE();
+
+	if (_storedFrame && _buffer) {
+		for (uint y = 0; y < _height; y++) {
+			int realY = yOffset + y;
+			if (realY < 0 || realY >= (int)_height)
+				continue;
+
+			for (uint x = 0; x < _width; x++) {
+				int realX = xOffset + x;
+				if (realX < 0 || realX >= (int)_width)	
+					continue;
+
+				_buffer[realY * _pitch + realX] = _storedFrame[y * _pitch + x];
+			}
+		}
+	}
+
+	return true;
 }
 
 void SMUSHVideo::decodeCodec1(SeekableReadStream *stream, int left, int top, uint width, uint height) {
